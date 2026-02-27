@@ -409,9 +409,11 @@ class _DataSourceBadge extends StatelessWidget {
           const Icon(Icons.info_outline_rounded,
               size: 16, color: Color(0xFFFF9800)),
           const SizedBox(width: 8),
-          Text(
-            'Sample data. Connect your device to see real history.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          Expanded(
+            child: Text(
+              'Sample data. Connect your device to see real history.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
           ),
         ],
       ),

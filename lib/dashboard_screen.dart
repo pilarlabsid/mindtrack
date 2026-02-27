@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'models/sensor_data.dart';
 import 'services/ble_service.dart';
 import 'services/storage_service.dart';
+import 'screens/profile_screen.dart';
 import 'screens/scan_screen.dart';
 import 'widgets/info_card.dart';
 import 'widgets/stress_indicator.dart';
@@ -124,6 +125,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Future<void> _openProfileScreen() async {
+    final updated = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ProfileScreen(),
+      ),
+    );
+    // Reload profile if returning from Edit screen
+    if (updated == true) {
+      _loadProfile();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -146,11 +159,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                 title: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Welcome, $_userName 👋',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1A1A2E),
+                    GestureDetector(
+                      onTap: _openProfileScreen,
+                      child: Text(
+                        'Welcome, $_userName 👋',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1A1A2E),
+                        ),
                       ),
                     ),
                     Text(
@@ -165,12 +181,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                   // Connection button that opens BLE scan
                   Padding(
                     padding: const EdgeInsets.only(right: 16),
-                    child: GestureDetector(
-                      onTap: _openScanScreen,
-                      child: _ConnectionBadge(
-                        isConnected: _ble.isConnected,
-                        deviceName: _ble.connectedDeviceName,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: _openScanScreen,
+                          child: _ConnectionBadge(
+                            isConnected: _ble.isConnected,
+                            deviceName: _ble.connectedDeviceName,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: _openProfileScreen,
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFF6C63FF).withValues(alpha: 0.15),
+                            child: const Icon(Icons.person, size: 20, color: Color(0xFF6C63FF)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
