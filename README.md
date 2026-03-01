@@ -1,105 +1,101 @@
-# 🧠 MindTrack
+# 🧠 MindTrack Pro
 
-**MindTrack** adalah aplikasi Flutter premium untuk memonitor perangkat wearable pendeteksi stres dan kecemasan secara real-time. Aplikasi ini menggabungkan data fisiologis mentah dengan profil fisik pengguna untuk memberikan analisis kesehatan mental yang akurat, personal, dan informatif.
-
----
-
-## ✨ Fitur Unggulan Modern
-
-- 📡 **BLE Integration** — Scan dan terhubung otomatis ke perangkat wearable ESP32 menggunakan protokol BLE GATT yang stabil.
-- 🧘 **Wawasan Stres Dinamis** — Matriks keputusan pintar yang menganalisis kombinasi Detak Jantung, GSR, HRV, dan Suhu untuk menjelaskan "Kenapa" Anda stres dan memberikan "Saran Spesifik" untuk normalisasi.
-- 👤 **Profil Biometrik Cerdas** — Penghitungan **BMI** otomatis dan usia dinamis (berdasarkan Tanggal Lahir) untuk menyesuaikan ambang batas stres secara medis.
-- 📸 **Editor Foto Profil** — Integrasi editor foto (Crop & Rotate) untuk personalisasi identitas pengguna yang sempurna.
-- 📊 **Dashboard Real-Time** — Indikator stres melingkar dengan animasi pulsasi, serta kartu data fisiologis yang diperbarui instan tanpa delay.
-- 📈 **History Interaktif** — Grafik garis stres 24 jam menggunakan `fl_chart` untuk melacak tren kesehatan mental jangka panjang.
-- 🔴🟠🟢 **Status Kesehatan** — Santai (0–30) · Normal (31–60) · Tegang (61–100).
+**MindTrack Pro** adalah aplikasi Flutter canggih untuk memonitor perangkat wearable pendeteksi stres dan kesehatan mental secara real-time. Aplikasi ini tidak hanya menampilkan data mentah, tetapi juga memberikan analisis cerdas dan saran tindakan berdasarkan profil fisik serta data biometrik pengguna (Detak Jantung, HRV, GSR, Suhu, dan Akselerasi).
 
 ---
 
-## 📡 Protokol BLE ESP32
+## ✨ Fitur Utama
 
-MindTrack membaca data berformat **JSON** yang dikirimkan melalui protokol BLE *Notify*.
+- 🧠 **Dynamic Stress Insights** — Analisis real-time "Mengapa" stres terjadi dan "Apa" yang harus dilakukan (Saran Tindakan) berdasarkan matriks keputusan multi-dimensi.
+- ⚖️ **Personalized Analytics** — Algoritma deteksi stres yang menyesuaikan dengan **Usia, Tinggi Badan, Berat Badan (BMI)**, dan Heart Rate Reserve (HRR).
+- 📡 **BLE Integration** — Scan dan terhubung otomatis ke perangkat wearable ESP32 menggunakan protokol GATT dengan sistem buffer JSON yang stabil.
+- 👤 **Advanced Profiling** — Setup profil lengkap (Nama, Tanggal Lahir, TB, BB) dengan fitur edit foto profil (Crop & Rotate).
+- 📊 **Dashboard Real-Time** — Indikator stres melingkar premium dengan animasi pulsa dan kartu data fisiologis terperinci.
+- 📈 **History & Edukasi** — Grafik riwayat stres 24 jam interaktif dan modul edukasi manajemen stres terintegrasi.
+- 🔄 **Live Fallback** — Simulasi data cerdas (*Mock Data*) saat koneksi terputus untuk memastikan UI tetap interaktif di simulator maupun device fisik.
+
+---
+
+## 📡 Protokol BLE ESP32 (V2)
+
+MindTrack Pro membaca data berformat **JSON** melalui paket *Notify*.
 
 ### UUIDs
 - **Service UUID:** `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
-- **Data Characteristic UUID:** `beb5483e-36e1-4688-b7f5-ea07361b26a8`
+- **Characteristic UUID:** `beb5483e-36e1-4688-b7f5-ea07361b26a8`
 
 ### Format Data JSON (Payload)
-
+ESP32 harus mengirimkan string JSON sebagai berikut:
 ```json
 {
-  "hr": 78,
-  "ibi": 769,
+  "hr": 75,
+  "ibi": 800,
   "hrv": 45,
   "t": 36.5,
-  "g": 12,
   "st": 42,
+  "g": 35,
+  "ir": 1200,
   "ax": 0.1,
-  "ay": 0.05,
-  "az": 9.8,
-  "ts": 1709078400
+  "ay": 0.2,
+  "az": 9.8
 }
 ```
 
-| Field | Keterangan |
-|---|---|
-| `hr` | Detak Jantung (BPM) |
-| `ibi` | Inter-Beat Interval (ms) |
-| `hrv` | Heart Rate Variability (ms) |
-| `t` | Suhu Kulit (°C) |
-| `g` | GSR / Skin Conductance (%) |
-| `st` | Indeks Stres Raw (0-100) |
-| `ax, ay, az` | Data Akselerometer |
+---
+
+## 🛠️ Panduan Build & Running
+
+### 🤖 Android
+1. **Persiapan:** Aktifkan **USB Debugging** dan **Location/GPS** pada perangkat fisik.
+2. **Build Release (APK):** Aturan ProGuard dikelola via `android/app/proguard-rules.pro`.
+3. **Run:** `flutter run --release`
+
+### 🍎 iOS
+1. **Persiapan:** Buka `ios/Runner.xcworkspace` di Xcode dan atur **Signing & Capabilities**.
+2. **Izin Privasi:** Bluetooth, Kamera, dan Galeri dikonfigurasi di `Info.plist`.
+3. **Run:** `flutter run --release`
+
+### 💻 Simulator vs Physical Device
+| Fitur | Simulator (iOS/Android) | Device Fisik |
+|-------|--------------------------|--------------|
+| **Koneksi BLE** | ❌ (Mock Data) | ✅ Berfungsi Penuh |
+| **Edit Foto** | ✅ Berfungsi | ✅ Berfungsi |
+| **Analisis Stres** | ✅ Berfungsi (via Mock) | ✅ Berfungsi (via Sensor) |
 
 ---
 
-## 🗂️ Struktur Proyek Terbaru
+## 🗂️ Struktur Proyek
 
 ```
 lib/
-├── main.dart                  # Core logic & App Routing
-├── dashboard_screen.dart      # Dashboard dengan 'Stress Insight Card'
-├── history_screen.dart        # Visualisasi tren stres fl_chart
+├── main.dart                  # Entry Point & Navigasi Utama
+├── dashboard_screen.dart      # Dashboard Utama & Kartu Analisis
+├── history_screen.dart        # Grafik Riwayat Stres 24 Jam
 ├── models/
-│   ├── sensor_data.dart       # Algoritma analisis stres & rekomendasi cerdas
-│   └── user_profile.dart      # Model profil (Name, BirthDate, BMI logic)
+│   ├── sensor_data.dart       # Logika Matriks Keputusan & Analisis Stres
+│   └── user_profile.dart      # Model User + Dinamic Age & BMI logic
 ├── screens/
-│   ├── onboarding_screen.dart # Setup awal (Nama, DOB, TB, BB)
-│   ├── profile_screen.dart    # Manajemen profil & Editor foto (Image Cropper)
-│   └── scan_screen.dart       # BLE Device Scanner
+│   ├── onboarding_screen.dart # Setup profil awal & intro modern
+│   ├── profile_screen.dart    # Management profil & Image Cropper
+│   ├── scan_screen.dart       # BLE Scanner (ESP32)
+│   ├── stress_edu_screen.dart # Modul edukasi manajemen stres
+│   └── sensor_detail_screen.dart # Detail data mentah sensor
 ├── services/
-│   ├── ble_service.dart       # Sinkronisasi data BLE 
-│   └── storage_service.dart   # Persistence data lokal (SharedPreferences)
+│   ├── ble_service.dart       # BLE Engine with JSON Buffering
+│   └── storage_service.dart   # Persistensi data lokal (SharedPreferences)
+└── widgets/
+    ├── stress_indicator.dart  # Custom Gauges & Progress Indicators
+    ├── info_card.dart         # UI Card reusable untuk sensor
+    └── app_watermark.dart     # Label branding aplikasi
 ```
 
 ---
 
-## 📦 Dependencies Utama
+## 🏢 Developers & Credits
 
-| Package | Peran |
-|---------|-------|
-| `flutter_blue_plus` | Konektivitas BLE Low Energy |
-| `image_cropper` | Editor foto profil (Crop/Rotate) |
-| `image_picker` | Pengambilan gambar galeri/kamera |
-| `fl_chart` | Render grafik data biometrik |
-| `shared_preferences` | Penyimpanan profil lokal |
-
----
-
-## 🛠️ Build & Development
-
-1. **Persiapan Android:** 
-   Pastikan `android/app/proguard-rules.pro` dikonfigurasi untuk menghindari error R8 pada library `image_cropper`.
-2. **Setup BLE:** 
-   Aktifkan GPS/Location dan Bluetooth di perangkat fisik untuk melakukan scanning.
-3. **Run:**
-   ```bash
-   flutter pub get
-   flutter run --release
-   ```
+Dikembangkan oleh **Pilar Labs**.
 
 ---
 
 ## 📄 Lisensi
-
-MIT License — Dikembangkan oleh Pilarlabs ID / MindTrack Team.
+MIT License — Solusi IoT untuk Digital Mental Health yang Presisi.

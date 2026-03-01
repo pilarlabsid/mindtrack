@@ -6,12 +6,16 @@
 	<string>MindTrack needs Bluetooth to connect to your wearable stress detection device.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>MindTrack needs Bluetooth to receive sensor data from your ESP32 device.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MindTrack needs access to your photo library to pick and crop profile photos.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>MindTrack needs access to your camera to take profile photos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mindtrack</string>
+	<string>MindTrack Pro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -10,7 +10,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 
     <application
-        android:label="mindtrack"
+        android:label="MindTrack Pro"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
