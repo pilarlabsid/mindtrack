@@ -6,19 +6,23 @@ import '../models/sensor_data.dart';
 
 /// BLE (Bluetooth Low Energy) service for MindTrack.
 ///
-/// Handles scanning, connecting, and receiving JSON sensor data
-/// from an ESP32-based wearable device.
+/// Handles scanning, connecting, and receiving compact JSON sensor data
+/// from a MindTrack wearable device via BLE Notify (500 ms interval).
 ///
-/// ## ESP32 JSON Format
+/// ## ESP32 JSON Format (~300 bytes)
 /// ```json
-/// {"hr":78,"temp":36.5,"move":2,"stress":42,"ts":1709078400}
+/// {"hr":95,"ibi":630,"hrv":28,"st":62,"t":35.8,
+///  "g":72,"ir":123456,"ax":0.12,"ay":0.05,"az":0.98,"ts":171932123}
 /// ```
+/// Key mapping: hr=Heart Rate(BPM), ibi=Inter-Beat Interval(ms),
+/// hrv=HRV SDNN(ms), st=Stress(0-100), t=Temp °C, g=GSR %(0-100),
+/// ir=IR raw, ax/ay/az=Accel m/s², ts=uptime s
 ///
 /// ## UUIDs
 /// - Service UUID: `4fafc201-1fb5-459e-8fcc-c5c9c331914b`
 /// - Data Characteristic UUID: `beb5483e-36e1-4688-b7f5-ea07361b26a8`
 class BleService extends ChangeNotifier {
-  // ── ESP32 GATT UUIDs ───────────────────────────────────────────────────
+  // ── MindTrack GATT UUIDs ───────────────────────────────────────────────────
   static const String serviceUuid = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
   static const String dataCharUuid = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
@@ -197,7 +201,8 @@ class BleService extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════
 
   /// Called when raw bytes arrive via BLE Notify.
-  /// ESP32 sends JSON like: {"hr":78,"temp":36.5,"move":2,"stress":42,"ts":1709078400}
+  /// MindTrack device sends compact JSON: {"hr":95,"ibi":630,"hrv":28,"st":62,"t":35.8,
+  ///                             "g":72,"ir":123456,"ax":0.12,"ay":0.05,"az":0.98,"ts":171932123}
   ///
   /// BLE MTU can be as small as 20 bytes, so the JSON may arrive split
   /// across multiple packets. We buffer until we receive a complete JSON object.

@@ -27,26 +27,40 @@ class MindTrackApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
+          seedColor: const Color(0xFF5C55ED), // Indigo Modern
           brightness: Brightness.light,
+          primary: const Color(0xFF5C55ED),
+          secondary: const Color(0xFF6366F1),
+          surface: Colors.white,
+          onSurface: const Color(0xFF1E293B), // Slate 800
         ),
         fontFamily: 'Roboto',
-        scaffoldBackgroundColor: const Color(0xFFF8F9FE),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Slate 50
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF8F9FE),
+          backgroundColor: Color(0xFFF8FAFC),
           elevation: 0,
           scrolledUnderElevation: 0,
           centerTitle: false,
           titleTextStyle: TextStyle(
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A2E),
+            color: Color(0xFF0F172A), // Slate 900
           ),
-          iconTheme: IconThemeData(color: Color(0xFF1A1A2E)),
+          iconTheme: IconThemeData(color: Color(0xFF0F172A)),
           systemOverlayStyle: SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
             statusBarIconBrightness: Brightness.dark,
           ),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          color: Colors.white,
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFFF1F5F9),
+          side: BorderSide.none,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       ),
       home: const AppRoot(),
@@ -139,23 +153,24 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
+          HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
         },
         backgroundColor: Colors.white,
         elevation: 8,
         shadowColor: const Color(0x1A000000),
-        indicatorColor: const Color(0xFF6C63FF).withValues(alpha: 0.15),
+        indicatorColor: const Color(0xFF5C55ED).withValues(alpha: 0.1),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard, color: Color(0xFF6C63FF)),
-            label: 'Dashboard',
+            selectedIcon: Icon(Icons.dashboard, color: Color(0xFF5C55ED)),
+            label: 'Beranda',
           ),
           NavigationDestination(
-            icon: Icon(Icons.show_chart_outlined),
-            selectedIcon: Icon(Icons.show_chart, color: Color(0xFF6C63FF)),
-            label: 'History',
+            icon: Icon(Icons.insights_rounded),
+            selectedIcon: Icon(Icons.insights_rounded, color: Color(0xFF5C55ED)),
+            label: 'Riwayat',
           ),
         ],
       ),

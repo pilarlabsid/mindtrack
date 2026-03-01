@@ -1,12 +1,15 @@
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'models/sensor_data.dart';
 import 'services/ble_service.dart';
+import 'widgets/app_watermark.dart';
 
-/// History screen – shows a line chart of stress levels over time.
+/// Riwayat Screen – Menampilkan tren kesehatan pengguna dari waktu ke waktu.
 ///
-/// Uses real BLE history data when available.
-/// Falls back to generated dummy data when history is empty.
+/// Tampilan dioptimalkan agar data historis yang banyak tetap terlihat ringkas
+/// dan mudah dipindai menggunakan tata letak grid dan ringkasan cerdas.
 class HistoryScreen extends StatefulWidget {
   final BleService bleService;
   const HistoryScreen({super.key, required this.bleService});
@@ -15,7 +18,15 @@ class HistoryScreen extends StatefulWidget {
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
+enum HistoryMetric { stress, heartRate, hrv, activity, temperature }
+
+enum TimeRange { day, week, month }
+
 class _HistoryScreenState extends State<HistoryScreen> {
+  HistoryMetric _selectedMetric = HistoryMetric.stress;
+  TimeRange _selectedRange = TimeRange.day;
+  bool _isExpanded = false;
+
   BleService get _ble => widget.bleService;
 
   @override
@@ -34,160 +45,184 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Build chart spots from BLE history or dummy data
+  bool get _isUsingRealData => _ble.history.isNotEmpty;
+
+  // ── Data Processing ───────────────────────────────────────────────────────
+
   List<FlSpot> _buildSpots() {
     final history = _ble.history;
-
-    if (history.isNotEmpty) {
-      // Use real BLE data — plot stress index over sequential time
-      // Group by minute, take average if multiple readings same minute
+    if (history.isNotEmpty && _selectedRange == TimeRange.day) {
       final spots = <FlSpot>[];
       final firstTs = history.first.timestamp;
 
       for (int i = 0; i < history.length; i++) {
         final minutesSinceStart =
             history[i].timestamp.difference(firstTs).inSeconds / 60.0;
-        spots.add(FlSpot(minutesSinceStart, history[i].stressIndex.toDouble()));
+        double val = _getMetricValue(history[i]);
+        spots.add(FlSpot(minutesSinceStart, val));
       }
       return spots;
     }
-
-    // Fallback: generate 24 hours of dummy data
     return _generateDummyHistory();
   }
 
-  bool get _isUsingRealData => _ble.history.isNotEmpty;
+  double _getMetricValue(SensorData data) {
+    switch (_selectedMetric) {
+      case HistoryMetric.stress:
+        return data.stressIndex.toDouble();
+      case HistoryMetric.heartRate:
+        return data.heartRate.toDouble();
+      case HistoryMetric.hrv:
+        return data.hrv.toDouble();
+      case HistoryMetric.activity:
+        return data.motionScore.toDouble();
+      case HistoryMetric.temperature:
+        return data.temperature;
+    }
+  }
 
-  static List<FlSpot> _generateDummyHistory() {
-    final rng = Random(42);
-    return List.generate(24, (i) {
-      double base = 30.0;
-      if (i >= 9 && i <= 12) base = 55.0;
-      if (i >= 13 && i <= 15) base = 45.0;
-      if (i >= 18 && i <= 21) base = 65.0;
-      if (i >= 22 || i <= 5) base = 20.0;
-      final value = (base + rng.nextDouble() * 20 - 10).clamp(5.0, 95.0);
-      return FlSpot(i.toDouble(), value);
+  List<FlSpot> _generateDummyHistory() {
+    final seed = 42 + _selectedMetric.index + (_selectedRange.index * 10);
+    final rng = Random(seed);
+
+    int count;
+    switch (_selectedRange) {
+      case TimeRange.day:
+        count = 24;
+        break;
+      case TimeRange.week:
+        count = 7;
+        break;
+      case TimeRange.month:
+        count = 30;
+        break;
+    }
+
+    return List.generate(count, (i) {
+      double base;
+      double variance;
+      switch (_selectedMetric) {
+        case HistoryMetric.stress:
+          base = 35;
+          variance = 30;
+          break;
+        case HistoryMetric.heartRate:
+          base = 70;
+          variance = 15;
+          break;
+        case HistoryMetric.hrv:
+          base = 25;
+          variance = 10;
+          break;
+        case HistoryMetric.activity:
+          base = 20;
+          variance = 40;
+          break;
+        case HistoryMetric.temperature:
+          base = 36.2;
+          variance = 0.8;
+          break;
+      }
+      final val = base + rng.nextDouble() * variance;
+      return FlSpot(i.toDouble(), val);
     });
   }
+
+  Color get _metricColor {
+    switch (_selectedMetric) {
+      case HistoryMetric.stress:
+        return const Color(0xFF6C63FF);
+      case HistoryMetric.heartRate:
+        return const Color(0xFFF44336);
+      case HistoryMetric.hrv:
+        return const Color(0xFF7C4DFF);
+      case HistoryMetric.activity:
+        return const Color(0xFF4CAF50);
+      case HistoryMetric.temperature:
+        return const Color(0xFFFF9800);
+    }
+  }
+
+  String get _metricUnit {
+    switch (_selectedMetric) {
+      case HistoryMetric.stress:
+        return '%';
+      case HistoryMetric.heartRate:
+        return 'BPM';
+      case HistoryMetric.hrv:
+        return 'ms';
+      case HistoryMetric.activity:
+        return '/100';
+      case HistoryMetric.temperature:
+        return '°C';
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final spots = _buildSpots();
-    final isReal = _isUsingRealData;
+    final isReal = _isUsingRealData && _selectedRange == TimeRange.day;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FE),
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Stress History',
-              style: TextStyle(fontWeight: FontWeight.bold),
+        title: const Text('Riwayat Kesehatan',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          if (!_isUsingRealData)
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              child: const Chip(
+                label: Text('Simulasi',
+                    style: TextStyle(fontSize: 10, color: Colors.orange)),
+                backgroundColor: Color(0xFFFFF3E0),
+                side: BorderSide.none,
+              ),
             ),
-            Text(
-              isReal
-                  ? '${_ble.history.length} readings recorded'
-                  : 'Sample data (last 24 hours)',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: Colors.grey.shade500),
-            ),
-          ],
-        ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Data source badge
-              if (!isReal)
-                _DataSourceBadge(isReal: isReal),
+              const SizedBox(height: 8),
+              _buildMetricTabs(),
+              const SizedBox(height: 12),
+              _buildTimeRangeSelector(),
+              const SizedBox(height: 24),
+              _buildSummaryHeader(spots),
+              const SizedBox(height: 16),
+              _buildChartCard(spots, isReal),
+              const SizedBox(height: 32),
 
-              // Summary chips
+              // ── Bagian Daftar Data (Compact Grid) ─────────────────────
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _SummaryChip(
-                    label: 'Average',
-                    value: '${_average(spots).toStringAsFixed(0)}%',
-                    color: const Color(0xFF6C63FF),
+                  Text(
+                    isReal ? 'Data Sesi Terkini' : _getListTitle(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1A1A2E),
+                    ),
                   ),
-                  const SizedBox(width: 12),
-                  _SummaryChip(
-                    label: 'Peak',
-                    value:
-                        '${spots.map((s) => s.y).reduce(max).toStringAsFixed(0)}%',
-                    color: const Color(0xFFF44336),
-                  ),
-                  const SizedBox(width: 12),
-                  _SummaryChip(
-                    label: 'Min',
-                    value:
-                        '${spots.map((s) => s.y).reduce(min).toStringAsFixed(0)}%',
-                    color: const Color(0xFF4CAF50),
-                  ),
+                  if ((isReal ? _ble.history.length : spots.length) > 6)
+                    TextButton(
+                      onPressed: () => setState(() => _isExpanded = !_isExpanded),
+                      child: Text(_isExpanded ? 'Sembunyikan' : 'Lihat Semua',
+                          style: const TextStyle(fontSize: 12)),
+                    ),
                 ],
               ),
-              const SizedBox(height: 24),
-
-              // Chart card
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 20, 16, 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 20,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8, bottom: 16),
-                      child: Text(
-                        isReal
-                            ? 'Stress Level (live session)'
-                            : 'Stress Level Over Time',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A2E),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: 240,
-                      child: LineChart(
-                          _buildChartData(spots, isReal)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Legend
-              _buildLegend(),
-              const SizedBox(height: 24),
-
-              // Hourly / reading list
-              Text(
-                isReal ? 'Recent Readings' : 'Hourly Breakdown',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1A1A2E),
-                ),
-              ),
+              const SizedBox(height: 8),
+              _buildCompactGrid(spots, isReal),
               const SizedBox(height: 12),
-              if (isReal)
-                ..._buildRealDataList()
-              else
-                ..._buildHourlyList(spots),
+              const AppWatermark(),
             ],
           ),
         ),
@@ -195,77 +230,260 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  // ── Chart ─────────────────────────────────────────────────────────────
+  String _getListTitle() {
+    switch (_selectedRange) {
+      case TimeRange.day:
+        return 'Ringkasan Per Jam';
+      case TimeRange.week:
+        return 'Ringkasan Harian';
+      case TimeRange.month:
+        return 'Ringkasan Harian';
+    }
+  }
+
+  Widget _buildMetricTabs() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: HistoryMetric.values.map((m) {
+          final isSelected = _selectedMetric == m;
+          final color = _getMetricColorFor(m);
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              selected: isSelected,
+              label: Text(_getMetricLabelFor(m)),
+              labelStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+              selectedColor: color,
+              checkmarkColor: Colors.white,
+              backgroundColor: Colors.white,
+              onSelected: (val) {
+                if (val) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _selectedMetric = m);
+                }
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTimeRangeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: TimeRange.values.map((r) {
+          final isSelected = _selectedRange == r;
+          String label;
+          switch (r) {
+            case TimeRange.day:
+              label = 'Hari';
+              break;
+            case TimeRange.week:
+              label = 'Minggu';
+              break;
+            case TimeRange.month:
+              label = 'Bulan';
+              break;
+          }
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() {
+                  _selectedRange = r;
+                  _isExpanded = false; // Reset expansion on range change
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? _metricColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSummaryHeader(List<FlSpot> spots) {
+    if (spots.isEmpty) return const SizedBox();
+    final values = spots.map((s) => s.y).toList();
+    final avg = values.reduce((a, b) => a + b) / values.length;
+    final peak = values.reduce(max);
+    final minVal = values.reduce(min);
+
+    return Row(
+      children: [
+        _CompactStat(
+          label: 'Rata-rata',
+          value: avg.toStringAsFixed(
+              avg < 10 && _selectedMetric == HistoryMetric.temperature ? 1 : 0),
+          unit: _metricUnit,
+          color: _metricColor,
+        ),
+        const SizedBox(width: 12),
+        _CompactStat(
+          label: 'Puncak',
+          value: peak.toStringAsFixed(
+              peak < 10 && _selectedMetric == HistoryMetric.temperature ? 1 : 0),
+          unit: _metricUnit,
+          color: Colors.redAccent,
+        ),
+        const SizedBox(width: 12),
+        _CompactStat(
+          label: 'Terendah',
+          value: minVal.toStringAsFixed(
+              minVal < 10 && _selectedMetric == HistoryMetric.temperature
+                  ? 1
+                  : 0),
+          unit: _metricUnit,
+          color: Colors.teal,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartCard(List<FlSpot> spots, bool isReal) {
+    String metricName;
+    switch (_selectedMetric) {
+      case HistoryMetric.stress: metricName = 'Tingkat Stres'; break;
+      case HistoryMetric.heartRate: metricName = 'Detak Jantung'; break;
+      case HistoryMetric.hrv: metricName = 'HRV'; break;
+      case HistoryMetric.activity: metricName = 'Aktivitas'; break;
+      case HistoryMetric.temperature: metricName = 'Suhu Tubuh'; break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 24, 20, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 20),
+            child: Row(
+              children: [
+                Container(
+                  width: 3,
+                  height: 14,
+                  decoration: BoxDecoration(
+                      color: _metricColor, borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Tren $metricName',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E)),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 220,
+            child: LineChart(_buildChartData(spots, isReal)),
+          ),
+        ],
+      ),
+    );
+  }
 
   LineChartData _buildChartData(List<FlSpot> spots, bool isReal) {
-    final maxX = spots.isEmpty ? 23.0 : spots.last.x;
+    final maxX = spots.isEmpty ? 1.0 : spots.last.x;
+    final range = _getYRange();
 
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: 20,
-        getDrawingHorizontalLine: (value) => FlLine(
-          color: Colors.grey.shade100,
-          strokeWidth: 1,
-        ),
+        getDrawingHorizontalLine: (value) =>
+            FlLine(color: Colors.grey.shade50, strokeWidth: 1),
       ),
       titlesData: FlTitlesData(
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: 20,
-            reservedSize: 34,
+            reservedSize: 32,
             getTitlesWidget: (val, meta) => Text(
               val.toInt().toString(),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
             ),
           ),
         ),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: isReal ? null : 4,
+            interval: _getBottomInterval(maxX),
             getTitlesWidget: (val, meta) {
-              if (!isReal) {
-                final hour = val.toInt();
-                if (hour % 4 != 0) return const SizedBox.shrink();
-                return Text(_formatHour(hour),
-                    style:
-                        TextStyle(fontSize: 10, color: Colors.grey.shade500));
-              }
-              // For real data show minutes
-              return Text(
-                '${val.toStringAsFixed(0)}m',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              if (val < 0 || val > maxX) return const SizedBox.shrink();
+              String text = _getBottomTitleText(val, isReal);
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(text,
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
               );
             },
           ),
         ),
-        rightTitles:
-            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles:
-            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       ),
       borderData: FlBorderData(show: false),
       minX: 0,
-      maxX: maxX < 1 ? 1 : maxX,
-      minY: 0,
-      maxY: 100,
+      maxX: maxX,
+      minY: range.$1,
+      maxY: range.$2,
       lineBarsData: [
         LineChartBarData(
           spots: spots,
           isCurved: true,
-          curveSmoothness: 0.35,
-          color: const Color(0xFF6C63FF),
-          barWidth: 2.5,
-          dotData: FlDotData(show: spots.length < 30),
+          color: _metricColor,
+          barWidth: 3,
+          isStrokeCapRound: true,
+          dotData: const FlDotData(show: false),
           belowBarData: BarAreaData(
             show: true,
             gradient: LinearGradient(
               colors: [
-                const Color(0xFF6C63FF).withValues(alpha: 0.3),
-                const Color(0xFF6C63FF).withValues(alpha: 0.0),
+                _metricColor.withValues(alpha: 0.2),
+                _metricColor.withValues(alpha: 0)
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -273,262 +491,182 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ],
-      extraLinesData: ExtraLinesData(
-        horizontalLines: [
-          HorizontalLine(
-            y: 30,
-            color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
-            strokeWidth: 1,
-            dashArray: [6, 4],
-            label: HorizontalLineLabel(
-              show: true,
-              alignment: Alignment.topRight,
-              labelResolver: (_) => 'Relaxed',
-              style: const TextStyle(fontSize: 9, color: Color(0xFF4CAF50)),
-            ),
-          ),
-          HorizontalLine(
-            y: 60,
-            color: const Color(0xFFFF9800).withValues(alpha: 0.5),
-            strokeWidth: 1,
-            dashArray: [6, 4],
-            label: HorizontalLineLabel(
-              show: true,
-              alignment: Alignment.topRight,
-              labelResolver: (_) => 'Normal',
-              style: const TextStyle(fontSize: 9, color: Color(0xFFFF9800)),
-            ),
-          ),
-        ],
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipColor: (_) => const Color(0xFF1A1A2E),
+          getTooltipItems: (items) => items
+              .map((i) => LineTooltipItem(
+                    '${i.y.toStringAsFixed(_selectedMetric == HistoryMetric.temperature ? 1 : 0)} $_metricUnit',
+                    const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
+                  ))
+              .toList(),
+        ),
       ),
     );
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────
-
-  Widget _buildLegend() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _LegendItem(color: const Color(0xFF4CAF50), label: '0–30 Relaxed'),
-        const SizedBox(width: 16),
-        _LegendItem(color: const Color(0xFFFF9800), label: '31–60 Normal'),
-        const SizedBox(width: 16),
-        _LegendItem(color: const Color(0xFFF44336), label: '61–100 Stressed'),
-      ],
-    );
+  double? _getBottomInterval(double maxX) {
+    switch (_selectedRange) {
+      case TimeRange.day:
+        return 4;
+      case TimeRange.week:
+        return 1;
+      case TimeRange.month:
+        return 5;
+    }
   }
 
-  /// Build list from real BLE history (most recent first, capped at 50).
-  List<Widget> _buildRealDataList() {
-    final items = _ble.history.reversed.take(50).toList();
-    return items.map((data) {
-      final val = data.stressIndex;
-      Color statusColor;
-      String statusLabel;
-      if (val <= 30) {
-        statusColor = const Color(0xFF4CAF50);
-        statusLabel = 'Relaxed';
-      } else if (val <= 60) {
-        statusColor = const Color(0xFFFF9800);
-        statusLabel = 'Normal';
-      } else {
-        statusColor = const Color(0xFFF44336);
-        statusLabel = 'Stressed';
-      }
-      final ts = data.timestamp;
-      final time =
-          '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
+  String _getBottomTitleText(double val, bool isReal) {
+    if (isReal) return '${val.toStringAsFixed(0)}m';
 
-      return _ReadingRow(
-        time: time,
-        value: val,
-        statusLabel: statusLabel,
-        statusColor: statusColor,
+    int v = val.toInt();
+    switch (_selectedRange) {
+      case TimeRange.day:
+        return _formatHourShort(v);
+      case TimeRange.week:
+        const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+        return days[v % 7];
+      case TimeRange.month:
+        return '${v + 1}';
+    }
+  }
+
+  (double, double) _getYRange() {
+    switch (_selectedMetric) {
+      case HistoryMetric.stress:
+        return (0, 100);
+      case HistoryMetric.heartRate:
+        return (50, 160);
+      case HistoryMetric.hrv:
+        return (0, 80);
+      case HistoryMetric.activity:
+        return (0, 100);
+      case HistoryMetric.temperature:
+        return (34, 40);
+    }
+  }
+
+  // ── Grid Builder ───────────────────────────────────────────────────────────
+
+  Widget _buildCompactGrid(List<FlSpot> spots, bool isReal) {
+    if (isReal) {
+      final history = _ble.history.reversed.toList();
+      final displayCount = _isExpanded ? history.length : min(6, history.length);
+      
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          mainAxisExtent: 68,
+        ),
+        itemCount: displayCount,
+        itemBuilder: (context, index) => _ReadingTile(
+          data: history[index],
+          metric: _selectedMetric,
+        ),
       );
-    }).toList();
-  }
-
-  List<Widget> _buildHourlyList(List<FlSpot> spots) {
-    return spots.map((spot) {
-      final hour = spot.x.toInt();
-      final val = spot.y.toInt();
-      Color statusColor;
-      String statusLabel;
-      if (val <= 30) {
-        statusColor = const Color(0xFF4CAF50);
-        statusLabel = 'Relaxed';
-      } else if (val <= 60) {
-        statusColor = const Color(0xFFFF9800);
-        statusLabel = 'Normal';
-      } else {
-        statusColor = const Color(0xFFF44336);
-        statusLabel = 'Stressed';
-      }
-      return _ReadingRow(
-        time: _formatHour(hour),
-        value: val,
-        statusLabel: statusLabel,
-        statusColor: statusColor,
+    } else {
+      final displaySpots = _isExpanded ? spots.reversed.toList() : spots.reversed.take(6).toList();
+      
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          mainAxisExtent: 48,
+        ),
+        itemCount: displaySpots.length,
+        itemBuilder: (context, index) => _AggregatedTile(
+          spot: displaySpots[index],
+          metric: _selectedMetric,
+          range: _selectedRange,
+        ),
       );
-    }).toList();
+    }
   }
 
-  double _average(List<FlSpot> spots) =>
-      spots.isEmpty ? 0 : spots.map((s) => s.y).reduce((a, b) => a + b) / spots.length;
+  // ── Data Mappers ───────────────────────────────────────────────────────────
 
-  String _formatHour(int h) {
-    if (h == 0) return '12 AM';
-    if (h < 12) return '$h AM';
-    if (h == 12) return '12 PM';
-    return '${h - 12} PM';
+  String _getMetricLabelFor(HistoryMetric m) {
+    switch (m) {
+      case HistoryMetric.stress:
+        return 'Stres';
+      case HistoryMetric.heartRate:
+        return 'Jantung';
+      case HistoryMetric.hrv:
+        return 'HRV';
+      case HistoryMetric.activity:
+        return 'Gerak';
+      case HistoryMetric.temperature:
+        return 'Suhu';
+    }
   }
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Reusable sub-widgets
-// ═══════════════════════════════════════════════════════════════════════════
+  Color _getMetricColorFor(HistoryMetric m) {
+    switch (m) {
+      case HistoryMetric.stress:
+        return const Color(0xFF6C63FF);
+      case HistoryMetric.heartRate:
+        return const Color(0xFFF44336);
+      case HistoryMetric.hrv:
+        return const Color(0xFF7C4DFF);
+      case HistoryMetric.activity:
+        return const Color(0xFF4CAF50);
+      case HistoryMetric.temperature:
+        return const Color(0xFFFF9800);
+    }
+  }
 
-class _DataSourceBadge extends StatelessWidget {
-  final bool isReal;
-  const _DataSourceBadge({required this.isReal});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFF9800).withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: const Color(0xFFFF9800).withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              size: 16, color: Color(0xFFFF9800)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Sample data. Connect your device to see real history.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-        ],
-      ),
-    );
+  String _formatHourShort(int h) {
+    int hour = h % 24;
+    if (hour == 0) return '12am';
+    if (hour < 12) return '${hour}am';
+    if (hour == 12) return '12pm';
+    return '${hour - 12}pm';
   }
 }
 
-class _ReadingRow extends StatelessWidget {
-  final String time;
-  final int value;
-  final String statusLabel;
-  final Color statusColor;
-  const _ReadingRow({
-    required this.time,
-    required this.value,
-    required this.statusLabel,
-    required this.statusColor,
-  });
+// ───────────────────────────────────────────────────────────────────────────
+// Sub-widgets
+// ───────────────────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Text(
-            time,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: value / 100,
-                backgroundColor: statusColor.withValues(alpha: 0.1),
-                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                minHeight: 6,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            '$value%',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A2E),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              statusLabel,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
+class _CompactStat extends StatelessWidget {
   final String label;
   final String value;
+  final String unit;
   final Color color;
-  const _SummaryChip(
-      {required this.label, required this.value, required this.color});
+  const _CompactStat(
+      {required this.label,
+      required this.value,
+      required this.unit,
+      required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade100),
         ),
         child: Column(
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color),
-            ),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 2),
             Text(label,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
           ],
         ),
       ),
@@ -536,25 +674,203 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendItem({required this.color, required this.label});
+class _ReadingTile extends StatelessWidget {
+  final SensorData data;
+  final HistoryMetric metric;
+  const _ReadingTile({required this.data, required this.metric});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration:
-              BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
-        ),
-        const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-      ],
+    final value = _getValue();
+    final unit = _getUnit();
+    final color = _getColor();
+    final time =
+        '${data.timestamp.hour.toString().padLeft(2, '0')}:${data.timestamp.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(time,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800)),
+                Text(_getStatusLabel(),
+                    style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                value.toStringAsFixed(metric == HistoryMetric.temperature ? 1 : 0),
+                style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold, color: color),
+              ),
+              Text(unit,
+                  style: TextStyle(fontSize: 9, color: Colors.grey.shade400)),
+            ],
+          ),
+        ],
+      ),
     );
+  }
+
+  double _getValue() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return data.stressIndex.toDouble();
+      case HistoryMetric.heartRate:
+        return data.heartRate.toDouble();
+      case HistoryMetric.hrv:
+        return data.hrv.toDouble();
+      case HistoryMetric.activity:
+        return data.motionScore.toDouble();
+      case HistoryMetric.temperature:
+        return data.temperature;
+    }
+  }
+
+  String _getUnit() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return '%';
+      case HistoryMetric.heartRate:
+        return 'BPM';
+      case HistoryMetric.hrv:
+        return 'ms';
+      case HistoryMetric.activity:
+        return '/100';
+      case HistoryMetric.temperature:
+        return '°C';
+    }
+  }
+
+  Color _getColor() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return const Color(0xFF6C63FF);
+      case HistoryMetric.heartRate:
+        return const Color(0xFFF44336);
+      case HistoryMetric.hrv:
+        return const Color(0xFF7C4DFF);
+      case HistoryMetric.activity:
+        return const Color(0xFF4CAF50);
+      case HistoryMetric.temperature:
+        return const Color(0xFFFF9800);
+    }
+  }
+
+  String _getStatusLabel() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return data.stressLabelShort;
+      case HistoryMetric.heartRate:
+        return data.heartRateLabel;
+      case HistoryMetric.hrv:
+        return data.hrvLabel;
+      case HistoryMetric.activity:
+        return data.activityLabel;
+      case HistoryMetric.temperature:
+        return data.temperatureLabel;
+    }
+  }
+}
+
+class _AggregatedTile extends StatelessWidget {
+  final FlSpot spot;
+  final HistoryMetric metric;
+  final TimeRange range;
+  const _AggregatedTile(
+      {required this.spot, required this.metric, required this.range});
+
+  @override
+  Widget build(BuildContext context) {
+    final v = spot.x.toInt();
+    final timeStr = _getTimeStr(v);
+    final valStr =
+        spot.y.toStringAsFixed(metric == HistoryMetric.temperature ? 1 : 0);
+    final color = _getColor();
+    final unit = _getUnit();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade50)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(timeStr,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600)),
+          Text('$valStr $unit',
+              style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  String _getTimeStr(int v) {
+    switch (range) {
+      case TimeRange.day:
+        if (v == 0) return '12 AM';
+        if (v < 12) return '$v AM';
+        if (v == 12) return '12 PM';
+        return '${v - 12} PM';
+      case TimeRange.week:
+        const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+        return days[v % 7];
+      case TimeRange.month:
+        return 'Tgl ${v + 1}';
+    }
+  }
+
+  String _getUnit() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return '%';
+      case HistoryMetric.heartRate:
+        return 'BPM';
+      case HistoryMetric.hrv:
+        return 'ms';
+      case HistoryMetric.activity:
+        return '/100';
+      case HistoryMetric.temperature:
+        return '°C';
+    }
+  }
+
+  Color _getColor() {
+    switch (metric) {
+      case HistoryMetric.stress:
+        return const Color(0xFF6C63FF);
+      case HistoryMetric.heartRate:
+        return const Color(0xFFF44336);
+      case HistoryMetric.hrv:
+        return const Color(0xFF7C4DFF);
+      case HistoryMetric.activity:
+        return const Color(0xFF4CAF50);
+      case HistoryMetric.temperature:
+        return const Color(0xFFFF9800);
+    }
   }
 }
